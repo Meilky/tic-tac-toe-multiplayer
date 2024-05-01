@@ -7,7 +7,7 @@ BUFFER_SIZE = 1024
 
 
 def main():
-    name = input("Wha't your name:")
+    name = input("What's your name:")
 
     s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
  

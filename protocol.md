@@ -34,4 +34,3 @@ GE:<int> - 0: tie, 1: you win, 2: you loose
 ### You
 
 RP: - replay
-QU: - quit
