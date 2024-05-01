@@ -1,13 +1,13 @@
+import os
 import socket
 import threading
-import re
+import time
+
+from utils import parseCmd
 
 HOST = '127.0.0.1'
 PORT = 6666
 BUFFER_SIZE = 1024
-
-PROT_RE = r"(\w+)\:(.*)"
-
 
 def checkWin(board, player):
     for i in range(0, 7, 3):
@@ -20,7 +20,6 @@ def checkWin(board, player):
         return True
     if(board[2] == player and board[4] == player and board[6] == player):
         return True
-    return False
 
 def checkLose(board, player):
     if(player == "X"):
@@ -130,97 +129,112 @@ class Game:
 
         return result
 
-def handle_client(s: socket.socket, gameId):
-    game = Game(gameId)
-    games.append(game)
+class Player:
+    def __init__(self, name):
+        self.state = 0
+        self.name = name
+        self.win = 0
+        self.lost = 0
+        self.rageQuit = 0
 
-    print("Start game:", gameId)
-    
+class Game:
+    def __init__(self, player1, player2):
+        self.board = ["","","","","","","","",""]
+        self.player1 = player1
+        self.player2 = player2
+        self.turn = player1
+
+def handleClientConnection(s: socket.socket, players):
     while True:
-        if not game.turn == "P":
-            continue;
+        try:
+            data = s.recv(BUFFER_SIZE)
 
-        if not game.winner == " ":
-            if game.winner == "T":
-                s.send(("GE:T").encode("ascii"))
-            elif game.winner == "P":
-                s.send(("GE:P").encode("ascii"))
-            elif game.winner == "A":
-                s.send(("GE:A").encode("ascii"))
+            if not data:
+                break;
 
-            break
+            (cmd, arg) = ("", "")
 
+            try:
+                (cmd, arg) = parseCmd(data.decode("ascii"))
+            except: 
+                s.close()
+                break;
 
-        s.send(("BO:" + ",".join(game.board)).encode("ascii"))
+            if not cmd == "PL":
+                s.send("ER:You should send your name first".encode("ascii"))
+                s.close()
+                break;
 
-        data = s.recv(BUFFER_SIZE)
+            if not len(arg) > 0:
+                s.send("ER:You should send your name first".encode("ascii"))
+                s.close()
+                break;
 
-        if not data:
-            break
+            nameExist = False
 
-        payload = data.decode("ascii")
+            for player in players:
+                if player.name == arg:
+                    nameExist = True
+                    break
 
-        result = re.search(PROT_RE, payload)
+            if nameExist:
+                s.send("ER:A user already have your name".encode("ascii"))
+                s.close()
+                break;
 
-        if not result:
-            break
+            players.append(Player(arg))
+            break;
+        except socket.error as e:
+            if e.errno == socket.EWOULDBLOCK:
+                pass
+            else:
+                print("Socket error:", e)
+                s.close()
+                break
 
-        (cmd, arg) = result.groups()
-
-        match cmd:
-            case "BO":
-                s.send(("BO:" + ",".join(game.board)).encode("ascii"))
-            case "MV":
-                try:
-                    result = game.pPlay(int(arg))
-
-                    if result == 1:
-                        s.send(("GE:P").encode("ascii"))
-                    elif result == 2:
-                        s.send(("GE:A").encode("ascii"))
-                    elif result == 3:
-                        s.send(("GE:T").encode("ascii"))
-                except:
-                    s.send(("ER:Can't do the move").encode("ascii"))
-            case _:
-                s.send("ER:Unkown command".encode("ascii"))
-
-    
-    s.close()
-
-def handle_ai():
+def handleServer(games, players):
     while True:
-        for i in range(0, len(games)):
-            game = games[i]
+        nextPlayer = None
 
-            if(game.turn == "A" and game.winner == " "):
-                moves = getAIMove(game.board, "O", "O")
+        for player in players:
+            if player.state == 0:
+                if not nextPlayer:
+                    nextPlayer = player
+                else:
+                    nextPlayer.state = 1
+                    player.state = 1
+                    games.append(Game(nextPlayer.name,player.name))
+                    nextPlayer = None
 
-                game.aiPlay(moves[0])
+        for game in games:
+
 
 
 def main():
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     
-    server_socket.bind((HOST, PORT))
+    serverSocket.bind((HOST, PORT))
     
-    server_socket.listen(5)
+    serverSocket.listen(5)
+
     print(f"Server listening on {HOST}:{PORT}")
     
-    ai_thread = threading.Thread(target=handle_ai)
-    ai_thread.start()
+    games = []
+    players = []
 
-    gameId = 0;
+    serverThread = threading.Thread(target=handleServer, args=(games, players))
+    serverThread.start()
+
     try:
         while True:
-            client_socket, address = server_socket.accept()
-            
-            client_thread = threading.Thread(target=handle_client, args=(client_socket, gameId))
-            client_thread.start()
+            clientSocket, address = serverSocket.accept()
 
-            gameId += 1
+            clientSocket.setblocking(False)
+            
+            clientThread = threading.Thread(target=handleClientConnection, args=(clientSocket, players))
+            clientThread.start()
     finally:
-        server_socket.close()
+        serverSocket.close()
 
 if __name__ == "__main__":
     main()
