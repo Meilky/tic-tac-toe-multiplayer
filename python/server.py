@@ -19,7 +19,6 @@ class Player:
         self.name = ""
         self.win = 0
         self.lost = 0
-        self.rageQuit = 0
 
     def recv(self):
         try:
@@ -134,6 +133,80 @@ def handleServer(games: list[Game], players: list[Player]):
         handlePlayers(games, players)
 
         handleGames(games)
+
+class TicTacToeGame:
+    def __init__(self, player1: Player, player2: Player):
+        self.state = 1
+        self.players = [player1, player2]
+        self.turn = player1.name
+        self.board = ["","","","","","","","",""]
+
+    def tick(self):
+        for player in self.players:
+            result = player.recv()
+
+            if not player.isConnected:
+                self.handleGO(player)
+                self.players.remove(player)
+                continue;
+
+            if result:
+                (cmd, arg) = result
+
+                self.handleCmd(player, cmd, arg)
+
+        
+    def handleCmd(self, player: Player, cmd, arg):
+        match cmd:
+            case "MV":
+                # do a move
+                pass
+            case "BO":
+
+                player.send(",".join(self.board))
+                pass
+            case "GO":
+                self.handleGO(player)
+                pass
+            case _:
+                player.send("ER:Unknow command")
+                pass
+
+    def handleGO(self, player: Player):
+        if player == self.players[0]:
+            player.lost += 1
+            self.players[1].win += 1
+            player.send("GE:" + self.players[1].name)
+        else:
+            player.lost += 1
+            self.players[0].win += 1
+            player.send("GE:" + self.players[0].name)
+
+        self.state = 0
+
+class TicTacToe:
+    def __init__(self):
+        self.waiting = []
+        self.games = []
+
+    def tick(self):
+        nextPlayer = None
+
+        if len(self.waiting) >= 2:
+            for player in self.waiting:
+                if not nextPlayer:
+                    nextPlayer = player
+                    continue
+
+                self.games.append(TicTacToeGame(nextPlayer, player))
+                self.waiting.remove(nextPlayer)
+                self.waiting.remove(player)
+
+                nextPlayer = None
+
+        for game in self.games:
+            game.tick()
+
 
 def main():
     serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

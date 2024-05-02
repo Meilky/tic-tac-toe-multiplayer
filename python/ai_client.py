@@ -7,14 +7,18 @@ BUFFER_SIZE = 1024
 
 
 def main():
-    name = input("What's your name:")
-
     s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
  
     s.connect((HOST,PORT))
 
+    name = input("What's your name:")
+
     s.send(("PL:"+name).encode("ascii"))
 
+    print("Waiting to be matched")
+
+    board = ["", "", "", "", "", "","", "", ""]
+    otherPlayer = ""
     while True:
         try:
             data = s.recv(BUFFER_SIZE)
@@ -29,9 +33,10 @@ def main():
             except: 
                 pass
 
+            if cmd == "AK":
+                otherPlayer = arg
 
             print(cmd, arg)
-            break
         except socket.error as e:
             if e.errno == socket.EWOULDBLOCK:
                 pass
