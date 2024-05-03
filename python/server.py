@@ -7,38 +7,58 @@ HOST = '127.0.0.1'
 PORT = 6666
 BUFFER_SIZE = 1024
 
-# state 0 = disconnected
-# state 1 = just connected
-# state 2 = waiting
-# state 3 = in game
-# state 4 = game done
-class Player:
-    def __init__(self, socket: socket.socket):
+class Client:
+    def __init__(self, socket: socket.socket, bufSize: int):
+        socket.setblocking(False)
+        self.state = "connected"
         self.socket = socket
-        self.isConnected = True
+        self.bufSize = bufSize
+
+        self.inputs = []
+        self.outputs = []
+
+    def update(self):
+        if self.state == "disconnected":
+            return
+
+        try:
+            data = self.socket.recv(self.bufSize)
+
+            if not data:
+                self.state = "disconnected";
+                self.socket.close()
+                return
+
+            try:
+                self.inputs.append(parseCmd(data.decode("ascii")))
+            except: 
+                return
+        except socket.error as e:
+            if not e.errno == socket.EWOULDBLOCK:
+                self.state = "disconnected"
+                self.socket.close()
+                return
+
+        for (cmd, arg) in self.outputs:
+            self.socket.send((cmd + ":" + arg).encode("ascii"))
+
+        self.outputs.clear()
+
+    def close(self):
+        if self.state == "disconnected":
+            return;
+
+        self.state = "disconnected";
+        self.socket.close()
+
+
+class Player:
+    def __init__(self, client: Client):
+        self.client = client
+        self.state = "init"
         self.name = ""
         self.win = 0
         self.lost = 0
-
-    def recv(self):
-        try:
-            data = self.socket.recv(BUFFER_SIZE)
-
-            if not data:
-                self.state = 0;
-                self.socket.close()
-                return None
-
-            try:
-                return parseCmd(data.decode("ascii"))
-            except: 
-                return None
-        except socket.error as e:
-            if not e.errno == socket.EWOULDBLOCK:
-                self.state = 0
-                self.socket.close()
-                
-        return None
 
     def send(self, msg: str):
         if self.state == 0:
@@ -226,7 +246,6 @@ def main():
     try:
         while True:
             clientSocket, address = serverSocket.accept()
-            clientSocket.setblocking(False)
 
             players.append(Player(clientSocket))
     finally:

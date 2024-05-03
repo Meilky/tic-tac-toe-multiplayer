@@ -2,7 +2,7 @@ import re
 
 PROT_RE = r"(\w+)\:(.*)"
 
-def parseCmd(payload):
+def parseCmd(payload: str):
     result = re.search(PROT_RE, payload)
 
     if not result:
