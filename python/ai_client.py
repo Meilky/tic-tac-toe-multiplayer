@@ -5,7 +5,6 @@ HOST = '127.0.0.1'
 PORT = 6666
 BUFFER_SIZE = 1024
 
-
 def main():
     s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
  
