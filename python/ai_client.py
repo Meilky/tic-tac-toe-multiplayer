@@ -6,18 +6,16 @@ PORT = 6666
 BUFFER_SIZE = 1024
 
 def main():
-    s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
  
     s.connect((HOST,PORT))
+    s.setblocking(False)
 
     name = input("What's your name:")
 
     s.send(("PL:"+name).encode("ascii"))
+    s.send(("EN:").encode("ascii"))
 
-    print("Waiting to be matched")
-
-    board = ["", "", "", "", "", "","", "", ""]
-    otherPlayer = ""
     while True:
         try:
             data = s.recv(BUFFER_SIZE)
@@ -25,15 +23,15 @@ def main():
             if not data:
                 break;
 
-            (cmd, arg) = ("", "")
+            cin = parseCmd(data.decode("ascii"))
 
-            try:
-                (cmd, arg) = parseCmd(data.decode("ascii"))
-            except: 
-                pass
+            if not cin:
+                break;
 
-            if cmd == "AK":
-                otherPlayer = arg
+            (cmd, arg) = cin 
+
+            if cmd == "GE":
+                s.send(("EN:").encode("ascii"))
 
             print(cmd, arg)
         except socket.error as e:
@@ -44,7 +42,6 @@ def main():
                 break
         
     s.close()
-    print("The connection has been closed")
  
 if __name__ == '__main__':
     main()
