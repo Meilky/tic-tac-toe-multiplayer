@@ -1,60 +1,86 @@
 import socket
-import re
+from utils import parseCmd
 
-PROT_RE = r"(\w+)\:(.*)"
+HOST = '127.0.0.1'
+PORT = 6666
+BUFFER_SIZE = 1024
 
-def printBoard(board):
-    print("\n")
-    for i in range(9):
-        if(not board[i] == " "):
-            print(board[i], end="   ")
-        else:
-            print("_", end="   ")
-        if(i==2 or i==5):
-            print("")
-    print("\n")
- 
+def prettyPrint(board, me, opp):
+    out = []
+
+    for i in range(0,9,3):
+        for j in range(3):
+            case = board[i+j]
+
+            if case == me:
+                out.append("X")
+            elif case == opp:
+                out.append("O")
+            else:
+                out.append(str(i+j))
+
+    print(" " + out[0] + " | " + out[1] + " | " + out[2])
+    print("-----------")
+    print(" " + out[3] + " | " + out[4] + " | " + out[5])
+    print("-----------")
+    print(" " + out[6] + " | " + out[7] + " | " + out[8])
+
 def main():
-    host = '127.0.0.1'
-    port = 6666
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
  
-    s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
- 
-    s.connect((host,port))
+    s.connect((HOST,PORT))
+    s.setblocking(False)
+
+    name = input("What's your name: ")
+    oppenent = "";
+
+    s.send(("PL:"+name).encode("ascii"))
+    s.send(("EN:").encode("ascii"))
+    print("Waiting for another player...")
 
     while True:
-        data = s.recv(1024)
+        try:
+            data = s.recv(BUFFER_SIZE)
 
-        if not data:
-            break
-
-        payload = data.decode("ascii")
-
-        result = re.search(PROT_RE, payload)
-
-        if not result:
-            break
-
-        (cmd, arg) = result.groups()
-
-        match cmd:
-            case "BO":
-                printBoard(arg.split(","))
-            case "GE":
-                if arg == "P":
-                    print("You win")
-                elif arg == "T":
-                    print("It's a tie")
-                elif arg == "A":
-                    print("You lost")
-
+            if not data:
                 break;
-            case "ER":
-                print("Error:", arg)
 
-        move = input("What to play:")
+            cin = parseCmd(data.decode("ascii"))
 
-        s.send(("MV:" + move).encode("ascii"))
+            if not cin:
+                break;
+
+            (cmd, arg) = cin 
+
+            if cmd == "AK":
+                oppenent = arg
+                print("Playing against", arg)
+            elif cmd == "GE":
+                print("The game is a", arg)
+                if not input("Do you want to play another game (y/n): ") == "y":
+                    break;
+                s.send(("EN:").encode("ascii"))
+                print("Waiting for another player...")
+            elif cmd == "TU":
+                args = arg.split(",")
+
+                print("Turn to", args[0])
+                prettyPrint(args[1:], name, oppenent)
+
+                if args[0] == name:
+                    move = input("Move: ")
+                    s.send(("MV:" + move).encode("ascii"))
+            elif cmd == "ER":
+                print(arg)
+                move = input("Move: ")
+                s.send(("MV:" + move).encode("ascii"))
+
+        except socket.error as e:
+            if e.errno == socket.EWOULDBLOCK:
+                pass
+            else:
+                print("Socket error:", e)
+                break
         
     s.close()
  
