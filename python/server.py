@@ -16,7 +16,7 @@ class Client:
         self.socket = socket
         self.bufSize = bufSize
         self.state = "connected"
-        self.input = ("", "")
+        self.input = None
 
     def update(self):
         try:
@@ -50,7 +50,7 @@ class Client:
     def close(self):
         self.state = "disconnected";
         self.socket.close()
-        self.input = ("", "")
+        self.input = None
 
 class Player:
     def __init__(self, client: Client):
@@ -145,16 +145,96 @@ class Game:
             self.turnChanged = False
 
             if self.turn == 1:
-                self.player1.send("TU", self.player1.name)
-                self.player2.send("TU", self.player1.name)
+                self.player1.send("TU", self.player1.name + "," + ",".join(self.board))
+                self.player2.send("TU", self.player1.name + "," + ",".join(self.board))
             else:
-                self.player1.send("TU", self.player2.name)
-                self.player2.send("TU", self.player2.name)
+                self.player1.send("TU", self.player2.name + "," + ",".join(self.board))
+                self.player2.send("TU", self.player2.name + "," + ",".join(self.board))
+
+        self.handlePlayerInput(self.player1, self.turn == 1)
+        self.handlePlayerInput(self.player2, self.turn == 2)
+
+        self.checkEnd()
+
+    def checkEnd(self):
+        if self.checkWin(self.player1.name):
+            self.handlePlayerWin(self.player1)
+            self.handlePlayerLost(self.player2)
+            self.state = "done"
+        elif self.checkWin(self.player2.name):
+            self.handlePlayerWin(self.player2)
+            self.handlePlayerLost(self.player1)
+            self.state = "done"
+        elif self.checkTie():
+            self.handlePlayerTie(self.player1)
+            self.handlePlayerTie(self.player2)
+            self.state = "done"
+
+    def checkWin(self, name):
+        for i in range(0, 7, 3):
+            if(self.board[i] == name and self.board[i+1] == name and self.board[i+2] == name):
+                return True
+        for i in range(0, 3):
+            if(self.board[i] == name and self.board[i+3] == name and self.board[i+6] == name):
+                return True
+        if(self.board[0] == name and self.board[4] == name and self.board[8] == name):
+            return True
+        if(self.board[2] == name and self.board[4] == name and self.board[6] == name):
+            return True
+        return False
+    
+    def checkTie(self):
+        for x in self.board:
+            if(x == ""):
+                return False
+        return True
+
+
+    def handlePlayerInput(self, player: Player, isTurn: bool):
+        pin = player.getInput()
+
+        if not pin:
+            return
+        
+        (cmd, arg) = pin
+
+        if isTurn and cmd == "MV":
+            self.handlePlayerMove(player, arg)
+
+    def handlePlayerMove(self, player: Player, move):
+        if not move.isdigit():
+            self.handlePlayerMoveError(player)
+            return
+
+        idx = int(move)
+
+        if idx < 0 or idx > 8:
+            self.handlePlayerMoveError(player)
+            return
+        
+        if not self.board[idx] == "":
+            self.handlePlayerMoveError(player)
+            return
+
+        self.board[idx] = player.name
+        self.turnChanged = True
+
+        if self.turn == 1:
+            self.turn = 2
+        else:
+            self.turn = 1
+
+    def handlePlayerMoveError(self, player: Player):
+        player.send("ER", "Can't move to this place")
 
     def handlePlayerWin(self, player: Player):
         player.nbWin += 1;
         player.state = "lobby"
         player.send("GE", "win")
+
+    def handlePlayerTie(self, player: Player):
+        player.state = "lobby"
+        player.send("GE", "tie")
 
     def handlePlayerLost(self, player: Player):
         player.nbLost += 1;
@@ -210,6 +290,9 @@ class Engine:
         if time.time() - self.startTime >= 5:
             self.printScoreBoard()
             self.startTime = time.time()
+
+        for player in self.players:
+            player.client.input = None
 
     def printScoreBoard(self):
         print("----------")
